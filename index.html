@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>办公室统一领导时间统筹系统｜内部专用</title>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- 替换失效依赖，修复link dead报错 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:"微软雅黑",system-ui}
         body{background:#f5f7fa;padding:12px;font-size:15px}
@@ -22,13 +23,15 @@
         .panel.show{display:block}
         .tip{font-size:14px;color:#666;margin:4px 0}
         .hide{display:none}
-        /* 办公室15天大屏时间表样式 */
+        /* 办公室15天大屏时间表样式（半小时为单位） */
         .schedule-table{width:100%;overflow:auto;border-collapse:collapse;font-size:12px}
-        .schedule-table th,.schedule-table td{border:1px solid #ddd;padding:6px;text-align:center}
+        .schedule-table th,.schedule-table td{border:1px solid #ddd;padding:6px;text-align:center;white-space:nowrap}
         .free{background:#edf2ff;color:#000}
         .busy{background:#fef0f0;color:#b00}
         .my-tooltip{position:relative}
         .my-tooltip:hover::after{content:attr(data-tip);position:absolute;left:0;top:120%;background:#222;color:#fff;padding:6px;border-radius:4px;z-index:999;width:220px;text-align:left}
+        /* 适配手机端表格滚动 */
+        #bigTableBox{overflow-x:auto;}
     </style>
 </head>
 <body>
@@ -80,7 +83,7 @@
     </div>
 </div>
 
-<!-- 2. 个人记录 -->
+<!-- 2. 个人记录（部门仅看自身，领导看自己） -->
 <div id="p2" class="panel">
     <div class="card">
         <h4>📋 本人所有报送记录、审核结果查询</h4>
@@ -99,11 +102,11 @@
     </div>
 </div>
 
-<!-- 4. 办公室专属：15天全局时间表（核心大屏） -->
+<!-- 4. 办公室专属：15天全局时间表（核心大屏，半小时为单位） -->
 <div id="p4" class="panel">
     <div class="card">
         <h4>📅 领导15天全域空闲总表（仅办公室可看）</h4>
-        <div class="tip">蓝色=空闲可安排 红色=已占用 长按查看占用详情</div>
+        <div class="tip">蓝色=空闲可安排 红色=已占用 长按查看占用详情（半小时为单位）</div>
         <div id="bigTableBox" style="overflow:auto"></div>
     </div>
 </div>
@@ -113,23 +116,37 @@
 const ADMIN_PASSWORD = "office6688"; // 办公室登录密码，你随时改
 let nowRole = ""; // admin / dept / leader
 const leaderArr = ["张书记","王局长","李分管","赵主任"];
-const timeSlotArr = ["08:30","09:00","09:30","10:00","10:30","11:00","14:00","14:30","15:00","15:30","16:00","16:30"];
+// 半小时为单位，设置全天时间段（覆盖工作时间）
+const timeSlotArr = [
+    "08:00-08:30", "08:30-09:00", "09:00-09:30", "09:30-10:00",
+    "10:00-10:30", "10:30-11:00", "11:00-11:30", "11:30-12:00",
+    "14:00-14:30", "14:30-15:00", "15:00-15:30", "15:30-16:00",
+    "16:00-16:30", "16:30-17:00", "17:00-17:30"
+];
 
 // 本地数据库读写
 function getDb(){return JSON.parse(localStorage.getItem("planDb")||"[]")}
 function saveDb(d){localStorage.setItem("planDb",JSON.stringify(d))}
 
-// 标签切换
+// 标签切换（修复跳转异常，身份选择后正常显示对应内容）
 document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.onclick=()=>{
         document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
         btn.classList.add("active");
         document.querySelectorAll(".panel").forEach(p=>p.classList.remove("show"));
         document.getElementById(btn.dataset.target).classList.add("show");
+        // 身份选择后，切换标签同步刷新对应内容
+        if(btn.dataset.target === "p2"){
+            loadMyList();
+        }else if(btn.dataset.target === "p3" && nowRole === "admin"){
+            refreshAudit();
+        }else if(btn.dataset.target === "p4" && nowRole === "admin"){
+            renderBigTable();
+        }
     }
 })
 
-// ========== 身份登录系统（权限锁死） ==========
+// ========== 身份登录系统（权限锁死，修复跳转异常） ==========
 function openLogin(){
     let s = prompt("请选择身份：\n1=综合办公室(最高权限)\n2=部门报送人员\n3=在岗领导本人");
     if(s==="1"){
@@ -139,22 +156,31 @@ function openLogin(){
             document.getElementById("roleText").innerText="✅ 综合办公室（全权管控）";
             document.getElementById("admTab1").style.display="block";
             document.getElementById("admTab2").style.display="block";
+            // 登录后自动刷新办公室相关内容，避免跳转异常
             refreshAudit();
             renderBigTable();
+            // 切换到默认面板，避免内容空白
+            document.querySelectorAll(".tab-btn")[0].click();
         }else alert("密码错误，不是办公室人员");
     }else if(s==="2"){
         nowRole="dept";
         document.getElementById("roleText").innerText="📎 业务部门（仅可上报）";
+        // 登录后加载自身申请记录，避免跳转异常
+        loadMyList();
+        document.querySelectorAll(".tab-btn")[0].click();
     }else if(s==="3"){
         nowRole="leader";
         document.getElementById("roleText").innerText="👤 在岗领导（自填行程）";
         document.getElementById("leaderOnlyBox").style.display="block";
+        // 登录后加载自身记录，避免跳转异常
+        loadMyList();
+        document.querySelectorAll(".tab-btn")[0].click();
     }else{
         alert("选择错误");
     }
 }
 
-// ========== 部门全员：提交预约上报 ==========
+// ========== 部门全员：提交预约上报（弹窗修改为指定内容） ==========
 function submitApply(){
     if(nowRole===""){alert("请先登录身份再上报");return}
     let d = getDb();
@@ -173,19 +199,30 @@ function submitApply(){
     };
     if(!obj.dept||!obj.title||!obj.leader||!obj.date){alert("必填项不能为空");return}
     d.push(obj);saveDb(d);
-    alert("✅ 已报送综合办公室，等待统一研判排班，请不要私下联系领导");
+    // 弹窗修改为用户要求的内容
+    alert("已报送综合办公室，等待同意研判。");
+    // 清空表单，方便重新提交
+    document.getElementById("applyDept").value = "";
+    document.getElementById("applyTitle").value = "";
+    document.getElementById("applyLeader").value = "";
+    document.getElementById("applyDate").value = "";
+    document.getElementById("applyStart").value = "";
+    document.getElementById("applyEnd").value = "";
+    document.getElementById("applyRemark").value = "";
 }
 
 // ========== 领导专用：自己登记固定行程 ==========
 function leaderAddSelfPlan(){
     if(nowRole!=="leader"){alert("仅限领导本人操作");return}
     let d=getDb();
+    let leaderName = prompt("请确认您的姓名（与系统领导名单一致）：");
+    if(!leaderArr.includes(leaderName)){alert("姓名错误，未找到该领导");return}
     let obj={
         id:Date.now(),
         role:"leader",
-        dept:"领导本人自主登记",
+        dept:leaderName+"（领导本人自主登记）",
         title:document.getElementById("leaderSelfEvent").value,
-        leader:"",
+        leader:leaderName,
         date:document.getElementById("leaderSelfDate").value,
         st:document.getElementById("leaderSelfStart").value,
         et:document.getElementById("leaderSelfEnd").value,
@@ -195,6 +232,11 @@ function leaderAddSelfPlan(){
     };
     d.push(obj);saveDb(d);
     alert("✅ 行程已同步办公室，全局时间自动锁死");
+    // 清空表单
+    document.getElementById("leaderSelfEvent").value = "";
+    document.getElementById("leaderSelfDate").value = "";
+    document.getElementById("leaderSelfStart").value = "";
+    document.getElementById("leaderSelfEnd").value = "";
 }
 
 // 领导一键呼叫办公室
@@ -210,18 +252,11 @@ function refreshAudit(){
     d.forEach(item=>{
         let statTxt = item.status==="pending"?"🔴待研判":item.status==="adminPass"?"🟢已安排":"🟡已退回";
         html += `
-        <div class="card">
-            <div><strong>${item.title}</strong></div>
-            <div>报送：${item.dept}</div>
-            <div>涉及领导：${item.leader||"无"}</div>
-            <div>时间：${item.date} ${item.st}-${item.et}</div>
-            <div>状态：${statTxt}</div>
+        ${item.title}报送：${item.dept}涉及领导：${item.leader||"无"}时间：${item.date} ${item.st}-${item.et}状态：${statTxt}
             ${item.status==="pending"?`
-            <textarea id="reply${item.id}" placeholder="退回请写原因，通过可不填"></textarea>
-            <button class="btn btn-green" onclick="auditPass(${item.id})">✅ 时间空闲，同意安排</button>
-            <button class="btn btn-red" onclick="auditReject(${item.id})">❌ 时间冲突，正式退回</button>
-            `:"<div>办公室回复：${item.reply}</div>"}
-        </div>
+            
+            `:"办公室回复：${item.reply}"}
+        
         `
     });
     document.getElementById("auditBox").innerHTML=html;
@@ -242,7 +277,7 @@ function auditReject(id){
     alert("❌ 已退回报送部门，对方会看到原因");
 }
 
-// ========== 核心功能：办公室15天全局时间表（带悬浮详情） ==========
+// ========== 核心功能：办公室15天全局时间表（半小时为单位，带悬浮详情） ==========
 function renderBigTable(){
     if(nowRole!=="admin")return;
     let d=getDb();
@@ -252,47 +287,7 @@ function renderBigTable(){
         let t=new Date();t.setDate(t.getDate()+i);
         dayList.push(t.toISOString().slice(0,10));
     }
-    // 构建表格
-    let html=`<table class="schedule-table"><thead><tr><th>领导</th>`;
-    dayList.forEach(day=>html+=`<th>${day.slice(5,10)}</th>`);
-    html += `</tr></thead><tbody>`;
-
-    leaderArr.forEach(leader=>{
-        html += `<tr><td>${leader}</td>`;
-        dayList.forEach(day=>{
-            // 判断当天是否有占用
-            let busyList = d.filter(x=>x.date===day && x.status==="adminPass" && (x.leader===leader||x.dept.includes("领导本人")));
-            if(busyList.length>0){
-                let tip = busyList.map(x=>x.title+"｜"+x.st+"-"+x.et).join("\n");
-                html += `<td class="busy my-tooltip" data-tip="${tip}">已占用</td>`;
-            }else{
-                html += `<td class="free">空闲</td>`;
-            }
-        });
-        html += `</tr>`;
-    });
-    html += `</tbody></table>`;
-    document.getElementById("bigTableBox").innerHTML=html;
-}
-
-// ========== 导出全量台账日志 ==========
-function exportAllLog(){
-    let d=getDb();
-    let sheetData=[["编号","报送主体","事项","对应领导","日期","时段","审核状态","办公室回复","登记时间"]];
-    d.forEach(x=>{
-        sheetData.push([x.id,x.dept,x.title,x.leader,x.date,x.st+"~"+x.et,x.status,x.reply,new Date(x.id).toLocaleString()])
-    });
-    let ws = XLSX.utils.aoa_to_sheet(sheetData);
-    let wb = XLSX.utils.book_new();
-    XLSX.book_append_sheet(wb,ws,"领导行程统筹台账");
-    XLSX.writeFile(wb,"办公室_领导行程全量日志.xlsx");
-    alert("✅ 台账已导出，可按月归档保存");
-}
-
-// 初始化刷新
-window.onload=()=>{
-    document.getElementById("roleText").innerText="未登录，请先进入对应身份";
-}
-</script>
-</body>
-</html>
+    // 构建表格（表头：领导 + 15天 + 每个时间段）
+    let html=`
+    领导\日期
+                ${dayList.map(day=>`
