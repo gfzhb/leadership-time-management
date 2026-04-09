@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>领导时间统筹系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+        body{margin:0;padding:10px;max-width:768px;margin:0 auto;background:#f6f7f9}
+        .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+        .btn{background:#1677ff;color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;margin:6px 0;width:100%}
+        .btn-success{background:#00b42A}
+        .btn-warn{background:#ff7d00}
+        .btn-danger{background:#ff4d4f}
+        .btn-light{background:#e5e6eb;color:#333}
+        input,select,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px}
+        .tab{display:flex;gap:6px;margin-bottom:10px}
+        .tab button{flex:1;padding:10px;border:none;background:#e5e6eb;border-radius:8px;color:#333}
+        .tab button.active{background:#1677ff;color:#fff}
+        .panel{display:none}
+        .panel.show{display:block}
+        .item{padding:12px;border-left:5px solid #1677ff;background:#f9fafc;border-radius:8px;margin-bottom:8px}
+        .wait{border-color:#ff7d00}
+        .pass{border-color:#00b42A}
+        .reject{border-color:#ff4d4f}
+        .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999}
+        .modal-box{background:#fff;border-radius:12px;padding:20px;width:90%;max-width:360px}
+        .tip{color:#666;font-size:14px;margin:4px 0}
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;margin:10px 0 16px">领导时间统筹系统</h2>
+
+    <div class="tab">
+        <button class="tab-btn active" data-target="panel1">预约申请</button>
+        <button class="tab-btn" data-target="panel2">日程查询</button>
+        <button class="tab-btn" data-target="panel3">共同空闲</button>
+        <button class="tab-btn" data-target="panel4">管理后台</button>
+    </div>
+
+    <div id="panel1" class="panel show">
+        <div class="card">
+            <h3>提交预约</h3>
+            <input type="text" id="title" placeholder="事项名称" required>
+            <input type="text" id="dept" placeholder="申请部门" required>
+            <select id="leaders" multiple size="4" style="height:auto">
+                <option value="王总">王总</option>
+                <option value="李总">李总</option>
+                <option value="张总">张总</option>
+                <option value="刘总">刘总</option>
+            </select>
+            <input type="date" id="date" required>
+            <input type="time" id="start" required>
+            <input type="time" id="end" required>
+            <textarea id="note" placeholder="备注" rows="2"></textarea>
+            <button class="btn" onclick="submitBook()">提交预约</button>
+        </div>
+    </div>
+
+    <div id="panel2" class="panel">
+        <div class="card">
+            <h3>日程查询</h3>
+            <select id="qLeader">
+                <option value="">全部领导</option>
+                <option value="王总">王总</option>
+                <option value="李总">李总</option>
+                <option value="张总">张总</option>
+                <option value="刘总">刘总</option>
+            </select>
+            <input type="date" id="qDate">
+            <button class="btn" onclick="loadList()">查询</button>
+            <button class="btn btn-success" onclick="exportExcel()">导出Excel</button>
+            <button class="btn btn-light" onclick="copyToWechat()">复制到微信</button>
+        </div>
+        <div id="list"></div>
+    </div>
+
+    <div id="panel3" class="panel">
+        <div class="card">
+            <h3>多领导共同空闲查询</h3>
+            <select id="freeLeaders" multiple size="4" style="height:auto">
+                <option value="王总">王总</option>
+                <option value="李总">李总</option>
+                <option value="张总">张总</option>
+                <option value="刘总">刘总</option>
+            </select>
+            <input type="date" id="freeDate">
+            <button class="btn btn-success" onclick="findCommonFree()">查询共同空闲</button>
+            <div id="freeResult" style="margin-top:12px"></div>
+        </div>
+    </div>
+
+    <div id="panel4" class="panel">
+        <div id="loginBox" class="card">
+            <h3>管理员登录</h3>
+            <input type="password" id="pwd" placeholder="请输入密码">
+            <button class="btn" onclick="login()">登录</button>
+        </div>
+        <div id="adminPanel" style="display:none">
+            <div class="card">
+                <h3>预约审核</h3>
+                <div id="checkList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_PWD = "admin888"
+        const TIME_SLOTS = ["08:30","09:00","09:30","10:00","10:30","11:00","11:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"]
+
+        document.querySelectorAll('.tab-btn').forEach(btn=>{
+            btn.onclick=()=>{
+                document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'))
+                btn.classList.add('active')
+                document.querySelectorAll('.panel').forEach(p=>p.classList.remove('show'))
+                document.getElementById(btn.dataset.target).classList.add('show')
+            }
+        })
+
+        function db(){return JSON.parse(localStorage.getItem('books')||'[]')}
+        function save(d){localStorage.setItem('books',JSON.stringify(d))}
+
+        function login(){
+            if(document.getElementById('pwd').value===ADMIN_PWD){
+                document.getElementById('loginBox').style.display='none'
+                document.getElementById('adminPanel').style.display='block'
+                loadCheck()
+            }else alert('密码错误')
+        }
+
+        function hasConflict(leader,date,start,end){
+            return db().some(i=>
+                i.status==='已通过' &&
+                i.leaders.includes(leader) &&
+                i.date===date &&
+                !((i.end<=start)||(i.start>=end))
+            )
+        }
+
+        function submitBook(){
+            const title = document.getElementById('title').value
+            const dept = document.getElementById('dept').value
+            const leaders = Array.from(document.getElementById('leaders').selectedOptions).map(o=>o.value)
+            const date = document.getElementById('date').value
+            const start = document.getElementById('start').value
+            const end = document.getElementById('end').value
+            const note = document.getElementById('note').value
+            if(!title||!dept||leaders.length===0||!date||!start||!end){alert('信息不全');return}
+            for(let l of leaders){
+                if(hasConflict(l,date,start,end)){
+                    alert(l+' 在该时间段已有安排，冲突！')
+                    return
+                }
+            }
+            const d = db()
+            d.push({id:Date.now(),title,dept,leaders:leaders.join('、'),date,start,end,note,status:'待审核'})
+            save(d)
+            alert('提交成功，等待办公室审核')
+            document.querySelectorAll('#panel1 input,#panel1 textarea').forEach(i=>i.value='')
+        }
+
+        function loadList(){
+            const ql = document.getElementById('qLeader').value
+            const qd = document.getElementById('qDate').value
+            const list = db().filter(i=>
+                (ql===''||i.leaders.includes(ql)) &&
+                (qd===''||i.date===qd)
+            ).sort((a,b)=>a.date+a.start>b.date+b.start?1:-1)
+            document.getElementById('list').innerHTML = list.map(i=>`
+                <div class="item ${i.status==='待审核'?'wait':i.status==='已通过'?'pass':'reject'}">
+                <div><strong>${i.title}</strong></div>
+                <div>${i.dept}</div>
+                <div>领导：${i.leaders}</div>
+                <div>${i.date} ${i.start}-${i.end}</div>
+                <div>状态：${i.status}</div>
+                <div>备注：${i.note||'-'}</div>
+                </div>
+            `).join('')
+        }
+
+        function loadCheck(){
+            const list = db()
+            document.getElementById('checkList').innerHTML = list.map(i=>`
+                <div class="item">
+                <strong>${i.title}</strong><br>
+                ${i.dept} | ${i.leaders}<br>
+                ${i.date} ${i.start}-${i.end}<br>
+                状态：${i.status}<br>
+                <button class="btn btn-success" onclick="pass(${i.id})">通过</button>
+                <button class="btn btn-danger" onclick="reject(${i.id})">驳回</button>
+                </div>
+            `).join('')
+        }
+        function pass(id){
+            const d=db()
+            const o=d.find(i=>i.id===id)
+            if(o)o.status='已通过'
+            save(d)
+            loadCheck()
+            loadList()
+        }
+        function reject(id){
+            const d=db()
+            const o=d.find(i=>i.id===id)
+            if(o)o.status='已驳回'
+            save(d)
+            loadCheck()
+            loadList()
+        }
+
+        function exportExcel(){
+            const data = [['事项','部门','领导','日期','开始','结束','状态','备注']]
+            db().forEach(i=>{
+                data.push([i.title,i.dept,i.leaders,i.date,i.start,i.end,i.status,i.note||'-'])
+            })
+            const ws = XLSX.utils.aoa_to_sheet(data)
+            const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb,ws,'领导日程')
+            XLSX.writeFile(wb,'领导日程统筹表.xlsx')
+        }
+
+        function copyToWechat(){
+            const list = db().filter(i=>i.status==='已通过').sort((a,b)=>a.date+a.start>b.date+b.start?1:-1)
+            let txt = "领导日程安排\n"
+            list.forEach(i=>{
+                txt+=`${i.date} ${i.start}-${i.end} ${i.title} ${i.leaders} ${i.dept}\n`
+            })
+            navigator.clipboard.writeText(txt).then(()=>alert('已复制，可直接粘贴到微信发送')).catch(()=>alert('复制失败'))
+        }
+
+        function findCommonFree(){
+            const ls = Array.from(document.getElementById('freeLeaders').selectedOptions).map(o=>o.value)
+            const dt = document.getElementById('freeDate').value
+            if(ls.length===0||!dt){alert('请选择领导和日期');return}
+            const busy = {}
+            ls.forEach(l=>busy[l]=new Set())
+            db().filter(i=>i.status==='已通过'&&i.date===dt).forEach(i=>{
+                ls.forEach(l=>{
+                    if(i.leaders.includes(l)){
+                        busy[l].add(i.start)
+                    }
+                })
+            })
+            let common = TIME_SLOTS.filter(t=>ls.every(l=>!busy[l].has(t)))
+            document.getElementById('freeResult').innerHTML = `
+            <div class="card"><strong>共同可约时间段</strong><br>
+            ${common.length?common.join('、'):'无共同空闲时间'}
+            </div>`
+        }
+
+        window.onload=()=>{loadList()}
+    </script>
+</body>
+</html>
