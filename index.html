@@ -2,254 +2,297 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>领导时间统筹系统</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>办公室统一领导时间统筹系统｜内部专用</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-        body{margin:0;padding:10px;max-width:768px;margin:0 auto;background:#f6f7f9}
-        .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-        .btn{background:#1677ff;color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;margin:6px 0;width:100%}
-        .btn-success{background:#00b42A}
-        .btn-warn{background:#ff7d00}
-        .btn-danger{background:#ff4d4f}
-        .btn-light{background:#e5e6eb;color:#333}
-        input,select,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px}
-        .tab{display:flex;gap:6px;margin-bottom:10px}
-        .tab button{flex:1;padding:10px;border:none;background:#e5e6eb;border-radius:8px;color:#333}
-        .tab button.active{background:#1677ff;color:#fff}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"微软雅黑",system-ui}
+        body{background:#f5f7fa;padding:12px;font-size:15px}
+        .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px #00000012}
+        .btn{width:100%;padding:11px;border:none;border-radius:8px;font-size:15px;margin:6px 0}
+        .btn-blue{background:#1677ed;color:#fff}
+        .btn-green{background:#00b42a;color:#fff}
+        .btn-orange{background:#ff7d00;color:#fff}
+        .btn-red{background:#f53f3f;color:#fff}
+        input,select,textarea{width:100%;padding:10px;border:1px solid #e5e6eb;border-radius:8px;margin:8px 0;font-size:15px}
+        .tab{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+        .tab button{padding:10px;border:none;border-radius:6px;background:#e5e6eb}
+        .tab button.active{background:#1677ed;color:#fff}
         .panel{display:none}
         .panel.show{display:block}
-        .item{padding:12px;border-left:5px solid #1677ff;background:#f9fafc;border-radius:8px;margin-bottom:8px}
-        .wait{border-color:#ff7d00}
-        .pass{border-color:#00b42A}
-        .reject{border-color:#ff4d4f}
-        .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999}
-        .modal-box{background:#fff;border-radius:12px;padding:20px;width:90%;max-width:360px}
-        .tip{color:#666;font-size:14px;margin:4px 0}
+        .tip{font-size:14px;color:#666;margin:4px 0}
+        .hide{display:none}
+        /* 办公室15天大屏时间表样式 */
+        .schedule-table{width:100%;overflow:auto;border-collapse:collapse;font-size:12px}
+        .schedule-table th,.schedule-table td{border:1px solid #ddd;padding:6px;text-align:center}
+        .free{background:#edf2ff;color:#000}
+        .busy{background:#fef0f0;color:#b00}
+        .my-tooltip{position:relative}
+        .my-tooltip:hover::after{content:attr(data-tip);position:absolute;left:0;top:120%;background:#222;color:#fff;padding:6px;border-radius:4px;z-index:999;width:220px;text-align:left}
     </style>
 </head>
 <body>
-    <h2 style="text-align:center;margin:10px 0 16px">领导时间统筹系统</h2>
+<h3 style="text-align:center;margin:10px 0">🏢 综合办公室 · 领导时间统一统筹平台</h3>
 
-    <div class="tab">
-        <button class="tab-btn active" data-target="panel1">预约申请</button>
-        <button class="tab-btn" data-target="panel2">日程查询</button>
-        <button class="tab-btn" data-target="panel3">共同空闲</button>
-        <button class="tab-btn" data-target="panel4">管理后台</button>
+<!-- 顶部角色入口 -->
+<div class="card">
+    <div>🔐 当前身份：<span id="roleText">未登录</span></div>
+    <button class="btn btn-blue" onclick="openLogin()">点击登录对应身份入口</button>
+</div>
+
+<!-- 顶部标签页 -->
+<div class="tab">
+    <button class="tab-btn active" data-target="p1">行程上报</button>
+    <button class="tab-btn" data-target="p2">我的申请记录</button>
+    <button class="tab-btn" data-target="p3" id="admTab1" style="display:none">后台审核</button>
+    <button class="tab-btn" data-target="p4" id="admTab2" style="display:none">15天全局时间表</button>
+</div>
+
+<!-- 1. 全员：上报行程、预约领导 -->
+<div id="p1" class="panel show">
+    <div class="card">
+        <h4>📝 部门/领导 统一报事预约（必须经办公室审核）</h4>
+        <input type="text" id="applyDept" placeholder="报送部门 / 本人姓名">
+        <input type="text" id="applyTitle" placeholder="活动事由、会议主题、外出走访内容">
+        <select id="applyLeader">
+            <option value="">选择需要协调的领导</option>
+            <option value="张书记">张书记</option>
+            <option value="王局长">王局长</option>
+            <option value="李分管">李分管</option>
+            <option value="赵主任">赵主任</option>
+        </select>
+        <input type="date" id="applyDate">
+        <input type="time" id="applyStart">
+        <input type="time" id="applyEnd">
+        <textarea id="applyRemark" placeholder="详细说明、是否公务、是否必须领导到场"></textarea>
+        <button class="btn btn-green" onclick="submitApply()">提交到办公室等待研判</button>
     </div>
 
-    <div id="panel1" class="panel show">
+    <!-- 领导专用：自己填私人行程 + 一键呼叫办公室 -->
+    <div class="card" id="leaderOnlyBox" style="display:none;border:2px solid #00b42a">
+        <h4>👤 领导专属：自主填报个人固定行程</h4>
+        <input type="text" id="leaderSelfEvent" placeholder="本人固定安排：值班、调研、会客、学习">
+        <input type="date" id="leaderSelfDate">
+        <input type="time" id="leaderSelfStart">
+        <input type="time" id="leaderSelfEnd">
+        <button class="btn btn-orange" onclick="leaderAddSelfPlan()">自行登记，同步给办公室</button>
+        <button class="btn btn-blue" onclick="callOfficeHelp()">📞 一键呼叫办公室代我录入公务</button>
+    </div>
+</div>
+
+<!-- 2. 个人记录 -->
+<div id="p2" class="panel">
+    <div class="card">
+        <h4>📋 本人所有报送记录、审核结果查询</h4>
+        <div id="myListBox"></div>
+    </div>
+</div>
+
+<!-- 3. 办公室后台审核（仅管理员可见） -->
+<div id="p3" class="panel">
+    <div class="card">
+        <h4>⚙️ 办公室后台：统一研判、安排或退回</h4>
+        <div class="tip">规则：看15天表格，有空就过，没空直接退回写理由</div>
+        <div id="auditBox"></div>
+        <hr>
+        <button class="btn btn-blue" onclick="exportAllLog()">📊 导出全量行程台账（归档备查）</button>
+    </div>
+</div>
+
+<!-- 4. 办公室专属：15天全局时间表（核心大屏） -->
+<div id="p4" class="panel">
+    <div class="card">
+        <h4>📅 领导15天全域空闲总表（仅办公室可看）</h4>
+        <div class="tip">蓝色=空闲可安排 红色=已占用 长按查看占用详情</div>
+        <div id="bigTableBox" style="overflow:auto"></div>
+    </div>
+</div>
+
+<script>
+// ========== 全局基础配置 ==========
+const ADMIN_PASSWORD = "office6688"; // 办公室登录密码，你随时改
+let nowRole = ""; // admin / dept / leader
+const leaderArr = ["张书记","王局长","李分管","赵主任"];
+const timeSlotArr = ["08:30","09:00","09:30","10:00","10:30","11:00","14:00","14:30","15:00","15:30","16:00","16:30"];
+
+// 本地数据库读写
+function getDb(){return JSON.parse(localStorage.getItem("planDb")||"[]")}
+function saveDb(d){localStorage.setItem("planDb",JSON.stringify(d))}
+
+// 标签切换
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+    btn.onclick=()=>{
+        document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        document.querySelectorAll(".panel").forEach(p=>p.classList.remove("show"));
+        document.getElementById(btn.dataset.target).classList.add("show");
+    }
+})
+
+// ========== 身份登录系统（权限锁死） ==========
+function openLogin(){
+    let s = prompt("请选择身份：\n1=综合办公室(最高权限)\n2=部门报送人员\n3=在岗领导本人");
+    if(s==="1"){
+        let pwd = prompt("请输入办公室管理密码");
+        if(pwd===ADMIN_PASSWORD){
+            nowRole="admin";
+            document.getElementById("roleText").innerText="✅ 综合办公室（全权管控）";
+            document.getElementById("admTab1").style.display="block";
+            document.getElementById("admTab2").style.display="block";
+            refreshAudit();
+            renderBigTable();
+        }else alert("密码错误，不是办公室人员");
+    }else if(s==="2"){
+        nowRole="dept";
+        document.getElementById("roleText").innerText="📎 业务部门（仅可上报）";
+    }else if(s==="3"){
+        nowRole="leader";
+        document.getElementById("roleText").innerText="👤 在岗领导（自填行程）";
+        document.getElementById("leaderOnlyBox").style.display="block";
+    }else{
+        alert("选择错误");
+    }
+}
+
+// ========== 部门全员：提交预约上报 ==========
+function submitApply(){
+    if(nowRole===""){alert("请先登录身份再上报");return}
+    let d = getDb();
+    let obj = {
+        id:Date.now(),
+        role:nowRole,
+        dept:document.getElementById("applyDept").value,
+        title:document.getElementById("applyTitle").value,
+        leader:document.getElementById("applyLeader").value,
+        date:document.getElementById("applyDate").value,
+        st:document.getElementById("applyStart").value,
+        et:document.getElementById("applyEnd").value,
+        remark:document.getElementById("applyRemark").value,
+        status:"pending",
+        reply:""
+    };
+    if(!obj.dept||!obj.title||!obj.leader||!obj.date){alert("必填项不能为空");return}
+    d.push(obj);saveDb(d);
+    alert("✅ 已报送综合办公室，等待统一研判排班，请不要私下联系领导");
+}
+
+// ========== 领导专用：自己登记固定行程 ==========
+function leaderAddSelfPlan(){
+    if(nowRole!=="leader"){alert("仅限领导本人操作");return}
+    let d=getDb();
+    let obj={
+        id:Date.now(),
+        role:"leader",
+        dept:"领导本人自主登记",
+        title:document.getElementById("leaderSelfEvent").value,
+        leader:"",
+        date:document.getElementById("leaderSelfDate").value,
+        st:document.getElementById("leaderSelfStart").value,
+        et:document.getElementById("leaderSelfEnd").value,
+        remark:"领导私人固定行程，优先锁定",
+        status:"adminPass",
+        reply:"系统自动锁定，办公室已备案"
+    };
+    d.push(obj);saveDb(d);
+    alert("✅ 行程已同步办公室，全局时间自动锁死");
+}
+
+// 领导一键呼叫办公室
+function callOfficeHelp(){
+    alert("📞 已发起呼叫，请直接电话联系办公室内勤，协助你统一录入公务安排");
+}
+
+// ========== 办公室后台：审核、通过、退回 ==========
+function refreshAudit(){
+    if(nowRole!=="admin")return;
+    let d=getDb();
+    let html="";
+    d.forEach(item=>{
+        let statTxt = item.status==="pending"?"🔴待研判":item.status==="adminPass"?"🟢已安排":"🟡已退回";
+        html += `
         <div class="card">
-            <h3>提交预约</h3>
-            <input type="text" id="title" placeholder="事项名称" required>
-            <input type="text" id="dept" placeholder="申请部门" required>
-            <select id="leaders" multiple size="4" style="height:auto">
-                <option value="王总">王总</option>
-                <option value="李总">李总</option>
-                <option value="张总">张总</option>
-                <option value="刘总">刘总</option>
-            </select>
-            <input type="date" id="date" required>
-            <input type="time" id="start" required>
-            <input type="time" id="end" required>
-            <textarea id="note" placeholder="备注" rows="2"></textarea>
-            <button class="btn" onclick="submitBook()">提交预约</button>
+            <div><strong>${item.title}</strong></div>
+            <div>报送：${item.dept}</div>
+            <div>涉及领导：${item.leader||"无"}</div>
+            <div>时间：${item.date} ${item.st}-${item.et}</div>
+            <div>状态：${statTxt}</div>
+            ${item.status==="pending"?`
+            <textarea id="reply${item.id}" placeholder="退回请写原因，通过可不填"></textarea>
+            <button class="btn btn-green" onclick="auditPass(${item.id})">✅ 时间空闲，同意安排</button>
+            <button class="btn btn-red" onclick="auditReject(${item.id})">❌ 时间冲突，正式退回</button>
+            `:"<div>办公室回复：${item.reply}</div>"}
         </div>
-    </div>
+        `
+    });
+    document.getElementById("auditBox").innerHTML=html;
+}
+function auditPass(id){
+    let d=getDb();
+    let o=d.find(x=>x.id===id);
+    o.status="adminPass";o.reply="办公室研判：领导时间空闲，统一安排到场";
+    saveDb(d);refreshAudit();renderBigTable();
+    alert("✅ 已正式排入领导日程，自动同步全域时间表");
+}
+function auditReject(id){
+    let d=getDb();
+    let o=d.find(x=>x.id===id);
+    let r=document.getElementById("reply"+id).value;
+    o.status="reject";o.reply="办公室退回理由："+r;
+    saveDb(d);refreshAudit();renderBigTable();
+    alert("❌ 已退回报送部门，对方会看到原因");
+}
 
-    <div id="panel2" class="panel">
-        <div class="card">
-            <h3>日程查询</h3>
-            <select id="qLeader">
-                <option value="">全部领导</option>
-                <option value="王总">王总</option>
-                <option value="李总">李总</option>
-                <option value="张总">张总</option>
-                <option value="刘总">刘总</option>
-            </select>
-            <input type="date" id="qDate">
-            <button class="btn" onclick="loadList()">查询</button>
-            <button class="btn btn-success" onclick="exportExcel()">导出Excel</button>
-            <button class="btn btn-light" onclick="copyToWechat()">复制到微信</button>
-        </div>
-        <div id="list"></div>
-    </div>
+// ========== 核心功能：办公室15天全局时间表（带悬浮详情） ==========
+function renderBigTable(){
+    if(nowRole!=="admin")return;
+    let d=getDb();
+    // 生成未来15天日期
+    let dayList=[];
+    for(let i=0;i<15;i++){
+        let t=new Date();t.setDate(t.getDate()+i);
+        dayList.push(t.toISOString().slice(0,10));
+    }
+    // 构建表格
+    let html=`<table class="schedule-table"><thead><tr><th>领导</th>`;
+    dayList.forEach(day=>html+=`<th>${day.slice(5,10)}</th>`);
+    html += `</tr></thead><tbody>`;
 
-    <div id="panel3" class="panel">
-        <div class="card">
-            <h3>多领导共同空闲查询</h3>
-            <select id="freeLeaders" multiple size="4" style="height:auto">
-                <option value="王总">王总</option>
-                <option value="李总">李总</option>
-                <option value="张总">张总</option>
-                <option value="刘总">刘总</option>
-            </select>
-            <input type="date" id="freeDate">
-            <button class="btn btn-success" onclick="findCommonFree()">查询共同空闲</button>
-            <div id="freeResult" style="margin-top:12px"></div>
-        </div>
-    </div>
-
-    <div id="panel4" class="panel">
-        <div id="loginBox" class="card">
-            <h3>管理员登录</h3>
-            <input type="password" id="pwd" placeholder="请输入密码">
-            <button class="btn" onclick="login()">登录</button>
-        </div>
-        <div id="adminPanel" style="display:none">
-            <div class="card">
-                <h3>预约审核</h3>
-                <div id="checkList"></div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const ADMIN_PWD = "admin888"
-        const TIME_SLOTS = ["08:30","09:00","09:30","10:00","10:30","11:00","11:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"]
-
-        document.querySelectorAll('.tab-btn').forEach(btn=>{
-            btn.onclick=()=>{
-                document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'))
-                btn.classList.add('active')
-                document.querySelectorAll('.panel').forEach(p=>p.classList.remove('show'))
-                document.getElementById(btn.dataset.target).classList.add('show')
+    leaderArr.forEach(leader=>{
+        html += `<tr><td>${leader}</td>`;
+        dayList.forEach(day=>{
+            // 判断当天是否有占用
+            let busyList = d.filter(x=>x.date===day && x.status==="adminPass" && (x.leader===leader||x.dept.includes("领导本人")));
+            if(busyList.length>0){
+                let tip = busyList.map(x=>x.title+"｜"+x.st+"-"+x.et).join("\n");
+                html += `<td class="busy my-tooltip" data-tip="${tip}">已占用</td>`;
+            }else{
+                html += `<td class="free">空闲</td>`;
             }
-        })
+        });
+        html += `</tr>`;
+    });
+    html += `</tbody></table>`;
+    document.getElementById("bigTableBox").innerHTML=html;
+}
 
-        function db(){return JSON.parse(localStorage.getItem('books')||'[]')}
-        function save(d){localStorage.setItem('books',JSON.stringify(d))}
+// ========== 导出全量台账日志 ==========
+function exportAllLog(){
+    let d=getDb();
+    let sheetData=[["编号","报送主体","事项","对应领导","日期","时段","审核状态","办公室回复","登记时间"]];
+    d.forEach(x=>{
+        sheetData.push([x.id,x.dept,x.title,x.leader,x.date,x.st+"~"+x.et,x.status,x.reply,new Date(x.id).toLocaleString()])
+    });
+    let ws = XLSX.utils.aoa_to_sheet(sheetData);
+    let wb = XLSX.utils.book_new();
+    XLSX.book_append_sheet(wb,ws,"领导行程统筹台账");
+    XLSX.writeFile(wb,"办公室_领导行程全量日志.xlsx");
+    alert("✅ 台账已导出，可按月归档保存");
+}
 
-        function login(){
-            if(document.getElementById('pwd').value===ADMIN_PWD){
-                document.getElementById('loginBox').style.display='none'
-                document.getElementById('adminPanel').style.display='block'
-                loadCheck()
-            }else alert('密码错误')
-        }
-
-        function hasConflict(leader,date,start,end){
-            return db().some(i=>
-                i.status==='已通过' &&
-                i.leaders.includes(leader) &&
-                i.date===date &&
-                !((i.end<=start)||(i.start>=end))
-            )
-        }
-
-        function submitBook(){
-            const title = document.getElementById('title').value
-            const dept = document.getElementById('dept').value
-            const leaders = Array.from(document.getElementById('leaders').selectedOptions).map(o=>o.value)
-            const date = document.getElementById('date').value
-            const start = document.getElementById('start').value
-            const end = document.getElementById('end').value
-            const note = document.getElementById('note').value
-            if(!title||!dept||leaders.length===0||!date||!start||!end){alert('信息不全');return}
-            for(let l of leaders){
-                if(hasConflict(l,date,start,end)){
-                    alert(l+' 在该时间段已有安排，冲突！')
-                    return
-                }
-            }
-            const d = db()
-            d.push({id:Date.now(),title,dept,leaders:leaders.join('、'),date,start,end,note,status:'待审核'})
-            save(d)
-            alert('提交成功，等待办公室审核')
-            document.querySelectorAll('#panel1 input,#panel1 textarea').forEach(i=>i.value='')
-        }
-
-        function loadList(){
-            const ql = document.getElementById('qLeader').value
-            const qd = document.getElementById('qDate').value
-            const list = db().filter(i=>
-                (ql===''||i.leaders.includes(ql)) &&
-                (qd===''||i.date===qd)
-            ).sort((a,b)=>a.date+a.start>b.date+b.start?1:-1)
-            document.getElementById('list').innerHTML = list.map(i=>`
-                <div class="item ${i.status==='待审核'?'wait':i.status==='已通过'?'pass':'reject'}">
-                <div><strong>${i.title}</strong></div>
-                <div>${i.dept}</div>
-                <div>领导：${i.leaders}</div>
-                <div>${i.date} ${i.start}-${i.end}</div>
-                <div>状态：${i.status}</div>
-                <div>备注：${i.note||'-'}</div>
-                </div>
-            `).join('')
-        }
-
-        function loadCheck(){
-            const list = db()
-            document.getElementById('checkList').innerHTML = list.map(i=>`
-                <div class="item">
-                <strong>${i.title}</strong><br>
-                ${i.dept} | ${i.leaders}<br>
-                ${i.date} ${i.start}-${i.end}<br>
-                状态：${i.status}<br>
-                <button class="btn btn-success" onclick="pass(${i.id})">通过</button>
-                <button class="btn btn-danger" onclick="reject(${i.id})">驳回</button>
-                </div>
-            `).join('')
-        }
-        function pass(id){
-            const d=db()
-            const o=d.find(i=>i.id===id)
-            if(o)o.status='已通过'
-            save(d)
-            loadCheck()
-            loadList()
-        }
-        function reject(id){
-            const d=db()
-            const o=d.find(i=>i.id===id)
-            if(o)o.status='已驳回'
-            save(d)
-            loadCheck()
-            loadList()
-        }
-
-        function exportExcel(){
-            const data = [['事项','部门','领导','日期','开始','结束','状态','备注']]
-            db().forEach(i=>{
-                data.push([i.title,i.dept,i.leaders,i.date,i.start,i.end,i.status,i.note||'-'])
-            })
-            const ws = XLSX.utils.aoa_to_sheet(data)
-            const wb = XLSX.utils.book_new()
-            XLSX.utils.book_append_sheet(wb,ws,'领导日程')
-            XLSX.writeFile(wb,'领导日程统筹表.xlsx')
-        }
-
-        function copyToWechat(){
-            const list = db().filter(i=>i.status==='已通过').sort((a,b)=>a.date+a.start>b.date+b.start?1:-1)
-            let txt = "领导日程安排\n"
-            list.forEach(i=>{
-                txt+=`${i.date} ${i.start}-${i.end} ${i.title} ${i.leaders} ${i.dept}\n`
-            })
-            navigator.clipboard.writeText(txt).then(()=>alert('已复制，可直接粘贴到微信发送')).catch(()=>alert('复制失败'))
-        }
-
-        function findCommonFree(){
-            const ls = Array.from(document.getElementById('freeLeaders').selectedOptions).map(o=>o.value)
-            const dt = document.getElementById('freeDate').value
-            if(ls.length===0||!dt){alert('请选择领导和日期');return}
-            const busy = {}
-            ls.forEach(l=>busy[l]=new Set())
-            db().filter(i=>i.status==='已通过'&&i.date===dt).forEach(i=>{
-                ls.forEach(l=>{
-                    if(i.leaders.includes(l)){
-                        busy[l].add(i.start)
-                    }
-                })
-            })
-            let common = TIME_SLOTS.filter(t=>ls.every(l=>!busy[l].has(t)))
-            document.getElementById('freeResult').innerHTML = `
-            <div class="card"><strong>共同可约时间段</strong><br>
-            ${common.length?common.join('、'):'无共同空闲时间'}
-            </div>`
-        }
-
-        window.onload=()=>{loadList()}
-    </script>
+// 初始化刷新
+window.onload=()=>{
+    document.getElementById("roleText").innerText="未登录，请先进入对应身份";
+}
+</script>
 </body>
 </html>
